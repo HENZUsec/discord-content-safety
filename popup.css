@@ -8,6 +8,7 @@ body {
 .popup-container {
   width: 320px;
   padding: 16px;
+  box-sizing: border-box;
 }
 
 h1 {
@@ -34,6 +35,11 @@ h1 {
   color: #f9fafb;
 }
 
+.popup-textarea:focus {
+  outline: 2px solid rgba(147, 197, 253, 0.9);
+  outline-offset: 2px;
+}
+
 .popup-buttons {
   display: flex;
   gap: 8px;
@@ -57,9 +63,15 @@ h1 {
   opacity: 0.95;
 }
 
+.popup-button:focus {
+  outline: 2px solid rgba(147, 197, 253, 0.9);
+  outline-offset: 2px;
+}
+
 .popup-status {
   margin-top: 12px;
   font-size: 13px;
+  word-break: break-word;
 }
 
 .popup-status-ok {
