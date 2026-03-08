@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Discord Content Safety</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup-container">
+    <h1>Discord Content Safety</h1>
+
+    <label for="apiKeyInput" class="popup-label">VirusTotal API key</label>
+
+    <textarea
+      id="apiKeyInput"
+      class="popup-textarea"
+      rows="5"
+      placeholder="Paste your VirusTotal API key here"
+    ></textarea>
+
+    <div class="popup-buttons">
+      <button id="saveButton" class="popup-button">Save</button>
+      <button id="clearButton" class="popup-button popup-button-secondary">Clear</button>
+    </div>
+
+    <p id="statusMessage" class="popup-status"></p>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

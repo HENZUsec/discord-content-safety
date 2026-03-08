@@ -1,0 +1,96 @@
+/* Container for buttons and status text next to a link or hash. */
+.dcs-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+/* Main action button used for VirusTotal checks. */
+.dcs-button {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(88, 101, 242, 0.15);
+  color: var(--text-normal, #ffffff);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Hover state for the action button. */
+.dcs-button:hover {
+  background: rgba(88, 101, 242, 0.25);
+}
+
+/* Keyboard focus state for better accessibility. */
+.dcs-button:focus {
+  outline: 2px solid rgba(147, 197, 253, 0.9);
+  outline-offset: 2px;
+}
+
+/* Disabled state while a check is running. */
+.dcs-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* Base style for all status messages. */
+.dcs-status {
+  font-size: 11px;
+  opacity: 0.95;
+  word-break: break-word;
+}
+
+/* Safe or clean result. */
+.dcs-status-ok {
+  color: #a7f3d0;
+}
+
+/* Suspicious result. */
+.dcs-status-warning {
+  color: #fcd34d;
+}
+
+/* Malicious result. */
+.dcs-status-danger {
+  color: #fca5a5;
+}
+
+/* Error state, such as network or API problems. */
+.dcs-status-error {
+  color: #fda4af;
+}
+
+/* Neutral state, such as no match found. */
+.dcs-status-neutral {
+  color: #cbd5e1;
+}
+
+/* Container that holds detected hashes below a message. */
+.dcs-hash-section {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* One row for one detected hash. */
+.dcs-hash-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+/* Text label that shows hash type and shortened hash value. */
+.dcs-hash-label {
+  font-size: 11px;
+  opacity: 0.95;
+  word-break: break-word;
+}
