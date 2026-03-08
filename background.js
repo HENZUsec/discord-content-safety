@@ -1,10 +1,13 @@
 const VIRUSTOTAL_FILE_REPORT_URL = "https://www.virustotal.com/api/v3/files/";
 const VIRUSTOTAL_URL_SUBMIT_URL = "https://www.virustotal.com/api/v3/urls";
-const VIRUSTOTAL_URL_REPORT_URL = "https://www.virustotal.com/api/v3/urls/";
+const VIRUSTOTAL_ANALYSIS_REPORT_URL = "https://www.virustotal.com/api/v3/analyses/";
 
 const REQUEST_TIMEOUT_MS = 10000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MIN_TIME_BETWEEN_REQUESTS_MS = 16000;
+
+const URL_POLL_INTERVAL_MS = 4000;
+const URL_POLL_MAX_ATTEMPTS = 4;
 
 const resultCache = new Map();
 
@@ -107,6 +110,7 @@ async function checkHashInVirusTotal(hashValue) {
   }
 
   const apiKey = await requireApiKey();
+
   await waitForRequestSlot();
 
   const requestUrl = VIRUSTOTAL_FILE_REPORT_URL + encodeURIComponent(normalizedHash);
@@ -152,7 +156,7 @@ async function checkHashInVirusTotal(hashValue) {
   return result;
 }
 
-// Submit a URL to VirusTotal and fetch the result.
+// Submit a URL to VirusTotal and poll until the analysis is ready.
 async function checkUrlInVirusTotal(urlValue) {
   if (!isValidWebUrl(urlValue)) {
     throw new Error("Invalid URL.");
@@ -170,16 +174,16 @@ async function checkUrlInVirusTotal(urlValue) {
   const apiKey = await requireApiKey();
 
   await waitForRequestSlot();
-  const urlId = await submitUrlForAnalysis(normalizedUrl, apiKey);
+  const analysisId = await submitUrlForAnalysis(normalizedUrl, apiKey);
 
-  await waitForRequestSlot();
-  const reportData = await fetchUrlReportById(urlId, apiKey);
+  const analysisData = await pollUrlAnalysisUntilReady(analysisId, apiKey);
+  const stats = safeExtractStatsFromAnalysis(analysisData);
 
   const result = {
     kind: "url",
     query: normalizedUrl,
-    status: reportData ? "found" : "not_found",
-    stats: reportData ? safeExtractStats(reportData) : null,
+    status: stats ? "found" : "not_found",
+    stats: stats,
     fromCache: false
   };
 
@@ -187,7 +191,7 @@ async function checkUrlInVirusTotal(urlValue) {
   return result;
 }
 
-// Submit a URL to VirusTotal.
+// Submit a URL to VirusTotal and get an analysis ID back.
 async function submitUrlForAnalysis(urlValue, apiKey) {
   const requestBody = new URLSearchParams();
   requestBody.append("url", urlValue);
@@ -206,22 +210,53 @@ async function submitUrlForAnalysis(urlValue, apiKey) {
   }
 
   const responseData = await safeReadJson(response);
-  const urlId = responseData?.data?.id;
+  const analysisId = responseData?.data?.id;
 
-  if (typeof urlId !== "string" || urlId.trim() === "") {
-    throw new Error("VirusTotal did not return a valid URL ID.");
+  if (typeof analysisId !== "string" || analysisId.trim() === "") {
+    throw new Error("VirusTotal did not return a valid analysis ID.");
   }
 
-  return urlId;
+  return analysisId;
 }
 
-// Fetch a submitted URL report by its VirusTotal ID.
-async function fetchUrlReportById(urlId, apiKey) {
-  if (typeof urlId !== "string" || urlId.trim() === "") {
-    throw new Error("Missing URL report ID.");
+// Poll the VirusTotal analysis endpoint until the URL analysis is ready.
+async function pollUrlAnalysisUntilReady(analysisId, apiKey) {
+  if (typeof analysisId !== "string" || analysisId.trim() === "") {
+    throw new Error("Missing analysis ID.");
   }
 
-  const requestUrl = VIRUSTOTAL_URL_REPORT_URL + encodeURIComponent(urlId);
+  for (let attempt = 1; attempt <= URL_POLL_MAX_ATTEMPTS; attempt += 1) {
+    await waitForRequestSlot();
+
+    const analysisData = await fetchAnalysisReportById(analysisId, apiKey);
+    const analysisStatus = getAnalysisStatus(analysisData);
+
+    if (analysisStatus === "completed") {
+      return analysisData;
+    }
+
+    if (analysisStatus === "queued" || analysisStatus === "in-progress") {
+      if (attempt < URL_POLL_MAX_ATTEMPTS) {
+        await delay(URL_POLL_INTERVAL_MS);
+        continue;
+      }
+
+      throw new Error("URL analysis is still pending. Please try again in a moment.");
+    }
+
+    if (analysisStatus === "not_found") {
+      throw new Error("No VirusTotal match found.");
+    }
+
+    throw new Error("VirusTotal returned an unknown analysis status.");
+  }
+
+  throw new Error("URL analysis did not finish in time.");
+}
+
+// Fetch a VirusTotal analysis report by ID.
+async function fetchAnalysisReportById(analysisId, apiKey) {
+  const requestUrl = VIRUSTOTAL_ANALYSIS_REPORT_URL + encodeURIComponent(analysisId);
 
   const response = await fetchWithTimeout(requestUrl, {
     method: "GET",
@@ -239,6 +274,46 @@ async function fetchUrlReportById(urlId, apiKey) {
   }
 
   return await safeReadJson(response);
+}
+
+// Read the status from an analysis object.
+function getAnalysisStatus(analysisData) {
+  if (!analysisData || typeof analysisData !== "object") {
+    return "not_found";
+  }
+
+  const statusValue = analysisData?.data?.attributes?.status;
+
+  if (typeof statusValue !== "string" || statusValue.trim() === "") {
+    return "unknown";
+  }
+
+  return statusValue.trim().toLowerCase();
+}
+
+// Extract analysis stats from a completed analysis object.
+function safeExtractStatsFromAnalysis(analysisData) {
+  const rawStats = analysisData?.data?.attributes?.stats;
+
+  if (!rawStats || typeof rawStats !== "object") {
+    return {
+      harmless: 0,
+      malicious: 0,
+      suspicious: 0,
+      undetected: 0,
+      timeout: 0,
+      unavailable: true
+    };
+  }
+
+  return {
+    harmless: toSafeNumber(rawStats.harmless),
+    malicious: toSafeNumber(rawStats.malicious),
+    suspicious: toSafeNumber(rawStats.suspicious),
+    undetected: toSafeNumber(rawStats.undetected),
+    timeout: toSafeNumber(rawStats.timeout),
+    unavailable: false
+  };
 }
 
 // Return the saved API key or throw an error if it is missing.
@@ -343,7 +418,7 @@ async function safeReadJson(response) {
   }
 }
 
-// Build a safe stats object from a VirusTotal response.
+// Build a safe stats object from a VirusTotal file response.
 function safeExtractStats(responseData) {
   const rawStats = responseData?.data?.attributes?.last_analysis_stats;
 
