@@ -117,7 +117,7 @@ function findAllMessageElements(rootElement) {
   return Array.from(allElements);
 }
 
-// Add a check button next to each valid link.
+// Add a check button next to each valid normal link.
 function addButtonsToLinks(messageElement) {
   const linkElements = messageElement.querySelectorAll("a[href]");
 
@@ -204,7 +204,7 @@ function addButtonsToHashes(messageElement) {
   markMessageAsProcessedForHashes(messageElement);
 }
 
-// Detect Discord file attachments and add a local risk check plus URL check button.
+// Detect Discord file attachments and add a compact risk label plus More menu.
 function addAttachmentChecks(messageElement) {
   if (messageElement.dataset.dcsAttachmentsProcessed === "true") {
     return;
@@ -290,7 +290,7 @@ function isProbablyAttachmentLink(linkElement) {
   return extension !== "";
 }
 
-// Extract file name, extension, risk level, and reason from an attachment link.
+// Extract attachment info from a link.
 function extractAttachmentInfo(linkElement) {
   if (!(linkElement instanceof HTMLAnchorElement)) {
     return null;
@@ -321,7 +321,8 @@ function extractAttachmentInfo(linkElement) {
   };
 }
 
-// Build one UI row for one attachment.
+// Build one compact UI row for one attachment.
+// The row shows only the risk label and a More button.
 function createAttachmentRow(attachmentInfo) {
   if (!attachmentInfo || typeof attachmentInfo.url !== "string") {
     return null;
@@ -330,34 +331,33 @@ function createAttachmentRow(attachmentInfo) {
   const row = document.createElement("div");
   row.className = "dcs-attachment-row";
 
-  const infoBlock = document.createElement("div");
-  infoBlock.className = "dcs-attachment-info";
-
-  const fileNameLabel = document.createElement("span");
-  fileNameLabel.className = "dcs-attachment-name";
-  fileNameLabel.textContent = "Attachment: " + shortenLongValue(attachmentInfo.fileName, 28);
-
   const riskLabel = document.createElement("span");
   riskLabel.className = "dcs-attachment-risk " + getAttachmentRiskClass(attachmentInfo.riskLevel);
   riskLabel.textContent = attachmentInfo.riskLabel;
 
-  const reasonLabel = document.createElement("span");
-  reasonLabel.className = "dcs-attachment-reason";
-  reasonLabel.textContent = attachmentInfo.riskReason;
+  const moreButton = createCheckButton("More");
+  moreButton.classList.add("dcs-more-button");
 
-  infoBlock.appendChild(fileNameLabel);
-  infoBlock.appendChild(riskLabel);
-  infoBlock.appendChild(reasonLabel);
+  const menu = document.createElement("div");
+  menu.className = "dcs-attachment-menu";
+  menu.hidden = true;
+
+  const reasonButton = createMenuButton("Why flagged");
+  reasonButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleReasonText(menu, attachmentInfo.riskReason);
+  });
 
   const controlsElement = createControlsContainer();
-  const checkButton = createCheckButton("Check attachment URL");
 
-  checkButton.addEventListener("click", async (event) => {
+  const checkUrlButton = createMenuButton("Check attachment URL");
+  checkUrlButton.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
 
     await runSafeCheck({
-      buttonElement: checkButton,
+      buttonElement: checkUrlButton,
       controlsElement,
       message: {
         type: "CHECK_URL",
@@ -366,27 +366,94 @@ function createAttachmentRow(attachmentInfo) {
     });
   });
 
-  controlsElement.appendChild(checkButton);
+  menu.appendChild(reasonButton);
+  menu.appendChild(checkUrlButton);
+  menu.appendChild(controlsElement);
 
-  row.appendChild(infoBlock);
-  row.appendChild(controlsElement);
+  moreButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    menu.hidden = !menu.hidden;
+  });
+
+  row.appendChild(riskLabel);
+  row.appendChild(moreButton);
+  row.appendChild(menu);
 
   return row;
 }
 
-// Insert the attachment row after the link so it does not sit inside the clickable preview.
+// Insert the attachment row outside the clickable preview area.
+// This helps prevent Discord from opening the image when clicking our controls.
 function insertAttachmentRowAfterLink(linkElement, attachmentRow) {
   try {
-    const existingRow = linkElement.parentElement?.querySelector(".dcs-attachment-row");
+    const safeParent =
+      findSafeAttachmentContainer(linkElement) ||
+      linkElement.parentElement;
+
+    if (!(safeParent instanceof HTMLElement)) {
+      return;
+    }
+
+    const existingRow = safeParent.querySelector(":scope > .dcs-attachment-row");
 
     if (existingRow) {
       return;
     }
 
-    linkElement.insertAdjacentElement("afterend", attachmentRow);
+    safeParent.insertAdjacentElement("afterend", attachmentRow);
   } catch (error) {
     console.error("Failed to insert attachment row:", error);
   }
+}
+
+// Try to find a safe container around the attachment preview.
+function findSafeAttachmentContainer(linkElement) {
+  if (!(linkElement instanceof HTMLElement)) {
+    return null;
+  }
+
+  const possibleContainer =
+    linkElement.closest("div[class*='wrapper']") ||
+    linkElement.closest("div[class*='container']") ||
+    linkElement.closest("li") ||
+    linkElement.closest("article");
+
+  if (possibleContainer instanceof HTMLElement) {
+    return possibleContainer;
+  }
+
+  return null;
+}
+
+// Create a button used inside the More menu.
+function createMenuButton(buttonText) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dcs-menu-button";
+  button.textContent = buttonText;
+
+  return button;
+}
+
+// Toggle a small explanation text inside the menu.
+function toggleReasonText(menuElement, reasonText) {
+  if (!(menuElement instanceof HTMLElement)) {
+    return;
+  }
+
+  const existingReason = menuElement.querySelector(".dcs-attachment-reason");
+
+  if (existingReason) {
+    existingReason.remove();
+    return;
+  }
+
+  const reasonLabel = document.createElement("div");
+  reasonLabel.className = "dcs-attachment-reason";
+  reasonLabel.textContent = reasonText;
+
+  menuElement.appendChild(reasonLabel);
 }
 
 // Analyze a file name and return a simple risk assessment.
@@ -422,7 +489,7 @@ function analyzeAttachmentName(fileName) {
     return {
       riskLevel: "medium",
       riskLabel: "Potentially risky attachment",
-      riskReason: "Archive, shortcut, image disk, or HTML-based file"
+      riskReason: "Archive, shortcut, disk image, or HTML-based file"
     };
   }
 
@@ -833,7 +900,7 @@ function shortenLongValue(value, visibleLength = 14) {
   return value.slice(0, visibleLength) + "...";
 }
 
-// Decide if a URL should be handled by the extension.
+// Decide if a normal URL should be handled by the extension.
 function shouldHandleUrl(urlValue) {
   if (!isValidWebUrl(urlValue)) {
     return false;
