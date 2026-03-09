@@ -32,7 +32,7 @@ In the popup:
 
 The key is stored locally inside the extension.
 
-## How to use
+## Usage
 
 ### 1. Open Discord Web
 
@@ -58,9 +58,26 @@ When supported content is found, the extension adds:
 
 Click a button to send the item to VirusTotal and show the result directly in Discord.
 
-### Example results
+## Attachment checks
 
-- `No VT match`
-- `Clean or undetected`
-- `Flagged: 1 malicious, 0 suspicious`
-- `Rate limit reached. Please wait before checking again.`
+This extension can also inspect Discord file attachments without downloading the file itself.
+
+The current attachment check is heuristic-based and looks at:
+
+- file name
+- file extension
+- double extensions
+- macro-enabled document formats
+- archive and script-like file types
+
+Examples of attachment labels include:
+
+- `High risk file type`
+- `Macro-enabled document`
+- `Potentially risky attachment`
+- `No obvious filename risk`
+
+The extension also adds **Check attachment URL**, which lets you check the attachment link with VirusTotal.
+
+**Note:**  
+This is **not a full file scan**. The extension does not download, hash, or upload the file in this mode.

@@ -94,3 +94,63 @@
   opacity: 0.95;
   word-break: break-word;
 }
+
+/* One row for one detected attachment. */
+.dcs-attachment-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+/* Block that holds attachment metadata. */
+.dcs-attachment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Attachment file name label. */
+.dcs-attachment-name {
+  font-size: 11px;
+  opacity: 0.95;
+  word-break: break-word;
+}
+
+/* Base style for attachment risk labels. */
+.dcs-attachment-risk {
+  display: inline-block;
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* High risk attachment label. */
+.dcs-attachment-risk-high {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+/* Medium risk attachment label. */
+.dcs-attachment-risk-medium {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+/* Low risk attachment label. */
+.dcs-attachment-risk-low {
+  background: rgba(34, 197, 94, 0.18);
+  color: #a7f3d0;
+}
+
+/* Short text that explains why the attachment was flagged. */
+.dcs-attachment-reason {
+  font-size: 11px;
+  color: #cbd5e1;
+  word-break: break-word;
+}

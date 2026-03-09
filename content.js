@@ -5,10 +5,50 @@ const HASH_PATTERNS = {
 };
 
 const MAX_MESSAGE_TEXT_LENGTH = 5000;
+
 const IGNORED_HOSTNAMES = new Set([
   "discord.com",
   "ptb.discord.com",
   "canary.discord.com"
+]);
+
+const HIGH_RISK_EXTENSIONS = new Set([
+  "exe",
+  "scr",
+  "bat",
+  "cmd",
+  "com",
+  "pif",
+  "msi",
+  "ps1",
+  "js",
+  "jse",
+  "vbs",
+  "vbe",
+  "wsf",
+  "wsh",
+  "hta",
+  "jar",
+  "reg"
+]);
+
+const MEDIUM_RISK_EXTENSIONS = new Set([
+  "zip",
+  "rar",
+  "7z",
+  "iso",
+  "img",
+  "html",
+  "htm",
+  "lnk"
+]);
+
+const MACRO_ENABLED_EXTENSIONS = new Set([
+  "docm",
+  "xlsm",
+  "pptm",
+  "dotm",
+  "xltm"
 ]);
 
 startExtension();
@@ -49,6 +89,7 @@ function processMessage(messageElement) {
 
   addButtonsToLinks(messageElement);
   addButtonsToHashes(messageElement);
+  addAttachmentChecks(messageElement);
 }
 
 // Find possible Discord message containers.
@@ -86,6 +127,11 @@ function addButtonsToLinks(messageElement) {
     }
 
     if (linkAlreadyProcessed(linkElement)) {
+      continue;
+    }
+
+    if (isProbablyAttachmentLink(linkElement)) {
+      markLinkAsProcessed(linkElement);
       continue;
     }
 
@@ -158,6 +204,332 @@ function addButtonsToHashes(messageElement) {
   markMessageAsProcessedForHashes(messageElement);
 }
 
+// Detect Discord file attachments and add a local risk check plus URL check button.
+function addAttachmentChecks(messageElement) {
+  if (messageElement.dataset.dcsAttachmentsProcessed === "true") {
+    return;
+  }
+
+  const attachmentLinks = findAttachmentLinks(messageElement);
+
+  if (attachmentLinks.length === 0) {
+    messageElement.dataset.dcsAttachmentsProcessed = "true";
+    return;
+  }
+
+  for (const attachmentLink of attachmentLinks) {
+    if (!(attachmentLink instanceof HTMLAnchorElement)) {
+      continue;
+    }
+
+    if (attachmentLink.dataset.dcsAttachmentProcessed === "true") {
+      continue;
+    }
+
+    const attachmentInfo = extractAttachmentInfo(attachmentLink);
+
+    if (!attachmentInfo) {
+      attachmentLink.dataset.dcsAttachmentProcessed = "true";
+      continue;
+    }
+
+    const attachmentRow = createAttachmentRow(attachmentInfo);
+
+    if (attachmentRow) {
+      insertAttachmentRowAfterLink(attachmentLink, attachmentRow);
+    }
+
+    attachmentLink.dataset.dcsAttachmentProcessed = "true";
+  }
+
+  messageElement.dataset.dcsAttachmentsProcessed = "true";
+}
+
+// Find likely Discord attachment links inside a message.
+function findAttachmentLinks(messageElement) {
+  const links = Array.from(messageElement.querySelectorAll("a[href]"));
+
+  return links.filter((linkElement) => {
+    if (!(linkElement instanceof HTMLAnchorElement)) {
+      return false;
+    }
+
+    return isProbablyAttachmentLink(linkElement);
+  });
+}
+
+// Return true if a link looks like a Discord attachment.
+function isProbablyAttachmentLink(linkElement) {
+  if (!(linkElement instanceof HTMLAnchorElement)) {
+    return false;
+  }
+
+  const urlValue = linkElement.href;
+
+  if (!isValidWebUrl(urlValue)) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(urlValue);
+    const hostname = parsedUrl.hostname.toLowerCase();
+
+    if (
+      hostname === "cdn.discordapp.com" ||
+      hostname === "media.discordapp.net"
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  const textValue = (linkElement.textContent || "").trim();
+  const extension = getFileExtension(textValue);
+
+  return extension !== "";
+}
+
+// Extract file name, extension, risk level, and reason from an attachment link.
+function extractAttachmentInfo(linkElement) {
+  if (!(linkElement instanceof HTMLAnchorElement)) {
+    return null;
+  }
+
+  const urlValue = linkElement.href;
+
+  if (!isValidWebUrl(urlValue)) {
+    return null;
+  }
+
+  const visibleText = (linkElement.textContent || "").trim();
+  const fileName = getBestAttachmentFileName(linkElement, visibleText, urlValue);
+
+  if (!fileName) {
+    return null;
+  }
+
+  const riskResult = analyzeAttachmentName(fileName);
+
+  return {
+    fileName,
+    url: urlValue,
+    extension: getFileExtension(fileName),
+    riskLevel: riskResult.riskLevel,
+    riskLabel: riskResult.riskLabel,
+    riskReason: riskResult.riskReason
+  };
+}
+
+// Build one UI row for one attachment.
+function createAttachmentRow(attachmentInfo) {
+  if (!attachmentInfo || typeof attachmentInfo.url !== "string") {
+    return null;
+  }
+
+  const row = document.createElement("div");
+  row.className = "dcs-attachment-row";
+
+  const infoBlock = document.createElement("div");
+  infoBlock.className = "dcs-attachment-info";
+
+  const fileNameLabel = document.createElement("span");
+  fileNameLabel.className = "dcs-attachment-name";
+  fileNameLabel.textContent = "Attachment: " + shortenLongValue(attachmentInfo.fileName, 28);
+
+  const riskLabel = document.createElement("span");
+  riskLabel.className = "dcs-attachment-risk " + getAttachmentRiskClass(attachmentInfo.riskLevel);
+  riskLabel.textContent = attachmentInfo.riskLabel;
+
+  const reasonLabel = document.createElement("span");
+  reasonLabel.className = "dcs-attachment-reason";
+  reasonLabel.textContent = attachmentInfo.riskReason;
+
+  infoBlock.appendChild(fileNameLabel);
+  infoBlock.appendChild(riskLabel);
+  infoBlock.appendChild(reasonLabel);
+
+  const controlsElement = createControlsContainer();
+  const checkButton = createCheckButton("Check attachment URL");
+
+  checkButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    await runSafeCheck({
+      buttonElement: checkButton,
+      controlsElement,
+      message: {
+        type: "CHECK_URL",
+        value: attachmentInfo.url
+      }
+    });
+  });
+
+  controlsElement.appendChild(checkButton);
+
+  row.appendChild(infoBlock);
+  row.appendChild(controlsElement);
+
+  return row;
+}
+
+// Insert the attachment row after the link so it does not sit inside the clickable preview.
+function insertAttachmentRowAfterLink(linkElement, attachmentRow) {
+  try {
+    const existingRow = linkElement.parentElement?.querySelector(".dcs-attachment-row");
+
+    if (existingRow) {
+      return;
+    }
+
+    linkElement.insertAdjacentElement("afterend", attachmentRow);
+  } catch (error) {
+    console.error("Failed to insert attachment row:", error);
+  }
+}
+
+// Analyze a file name and return a simple risk assessment.
+function analyzeAttachmentName(fileName) {
+  const normalizedFileName = fileName.trim().toLowerCase();
+  const extension = getFileExtension(normalizedFileName);
+
+  if (hasDoubleExtension(normalizedFileName)) {
+    return {
+      riskLevel: "high",
+      riskLabel: "High risk attachment",
+      riskReason: "Double extension detected"
+    };
+  }
+
+  if (HIGH_RISK_EXTENSIONS.has(extension)) {
+    return {
+      riskLevel: "high",
+      riskLabel: "High risk file type",
+      riskReason: "Executable or script-like file extension"
+    };
+  }
+
+  if (MACRO_ENABLED_EXTENSIONS.has(extension)) {
+    return {
+      riskLevel: "medium",
+      riskLabel: "Macro-enabled document",
+      riskReason: "Office file may contain macros"
+    };
+  }
+
+  if (MEDIUM_RISK_EXTENSIONS.has(extension)) {
+    return {
+      riskLevel: "medium",
+      riskLabel: "Potentially risky attachment",
+      riskReason: "Archive, shortcut, image disk, or HTML-based file"
+    };
+  }
+
+  if (extension === "pdf") {
+    return {
+      riskLevel: "low",
+      riskLabel: "Common document type",
+      riskReason: "PDF is common, but still verify before opening"
+    };
+  }
+
+  if (extension === "") {
+    return {
+      riskLevel: "medium",
+      riskLabel: "Unknown file type",
+      riskReason: "No visible file extension"
+    };
+  }
+
+  return {
+    riskLevel: "low",
+    riskLabel: "No obvious filename risk",
+    riskReason: "Filename does not match common risky patterns"
+  };
+}
+
+// Return true if the file name looks like it uses double extensions.
+function hasDoubleExtension(fileName) {
+  const cleanName = fileName.trim().toLowerCase();
+
+  const doubleExtensionPattern =
+    /\.(pdf|jpg|jpeg|png|gif|txt|doc|docx|xls|xlsx|ppt|pptx)\s*\.(exe|scr|bat|cmd|com|msi|js|vbs|jar|ps1)$/i;
+
+  return doubleExtensionPattern.test(cleanName);
+}
+
+// Get the file extension from a file name.
+function getFileExtension(fileName) {
+  if (typeof fileName !== "string") {
+    return "";
+  }
+
+  const cleanName = fileName.trim().toLowerCase();
+  const lastDotIndex = cleanName.lastIndexOf(".");
+
+  if (lastDotIndex === -1 || lastDotIndex === cleanName.length - 1) {
+    return "";
+  }
+
+  return cleanName.slice(lastDotIndex + 1);
+}
+
+// Try to find the best visible file name for a Discord attachment.
+function getBestAttachmentFileName(linkElement, visibleText, urlValue) {
+  if (visibleText && looksLikeFileName(visibleText)) {
+    return visibleText;
+  }
+
+  const ariaLabel = linkElement.getAttribute("aria-label") || "";
+
+  if (ariaLabel && looksLikeFileName(ariaLabel)) {
+    return ariaLabel.trim();
+  }
+
+  try {
+    const parsedUrl = new URL(urlValue);
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    const lastPathPart = pathParts[pathParts.length - 1] || "";
+
+    if (lastPathPart) {
+      return decodeURIComponent(lastPathPart);
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
+// Return true if a string looks like a file name.
+function looksLikeFileName(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (trimmedValue === "" || trimmedValue.length > 260) {
+    return false;
+  }
+
+  return trimmedValue.includes(".");
+}
+
+// Return the CSS class for the risk level.
+function getAttachmentRiskClass(riskLevel) {
+  if (riskLevel === "high") {
+    return "dcs-attachment-risk-high";
+  }
+
+  if (riskLevel === "medium") {
+    return "dcs-attachment-risk-medium";
+  }
+
+  return "dcs-attachment-risk-low";
+}
+
 // Create one UI row for one hash.
 function createHashRow(hashEntry) {
   if (!hashEntry || typeof hashEntry.value !== "string") {
@@ -170,7 +542,7 @@ function createHashRow(hashEntry) {
 
   const label = document.createElement("span");
   label.className = "dcs-hash-label";
-  label.textContent = hashEntry.type + ": " + shortenLongValue(hashEntry.value);
+  label.textContent = hashEntry.type + ": " + shortenLongValue(hashEntry.value, 14);
 
   const controlsElement = createControlsContainer();
   const checkButton = createCheckButton("Check hash");
@@ -449,12 +821,10 @@ function createOrGetHashSection(textContainer) {
 }
 
 // Shorten long values to keep the UI readable.
-function shortenLongValue(value) {
+function shortenLongValue(value, visibleLength = 14) {
   if (typeof value !== "string") {
     return "";
   }
-
-  const visibleLength = 14;
 
   if (value.length <= visibleLength) {
     return value;
