@@ -51,15 +51,50 @@ const MACRO_ENABLED_EXTENSIONS = new Set([
   "xltm"
 ]);
 
+let attachmentMenuCloseHandlerInitialized = false;
+
 startExtension();
 
 // Start the extension.
 function startExtension() {
   try {
+    setupAttachmentMenuCloseHandler();
     scanEntirePage();
     observePageChanges();
   } catch (error) {
     console.error("Discord Content Safety failed to start:", error);
+  }
+}
+
+// Close open attachment menus when clicking outside them.
+function setupAttachmentMenuCloseHandler() {
+  if (attachmentMenuCloseHandlerInitialized) {
+    return;
+  }
+
+  document.addEventListener("click", (event) => {
+    const clickedInsideAttachmentRow =
+      event.target instanceof Element &&
+      event.target.closest(".dcs-attachment-row");
+
+    if (clickedInsideAttachmentRow) {
+      return;
+    }
+
+    closeAllAttachmentMenus();
+  });
+
+  attachmentMenuCloseHandlerInitialized = true;
+}
+
+// Close all open attachment dropdown menus.
+function closeAllAttachmentMenus() {
+  const openMenus = document.querySelectorAll(".dcs-attachment-dropdown");
+
+  for (const menu of openMenus) {
+    if (menu instanceof HTMLElement) {
+      menu.hidden = true;
+    }
   }
 }
 
@@ -204,7 +239,7 @@ function addButtonsToHashes(messageElement) {
   markMessageAsProcessedForHashes(messageElement);
 }
 
-// Detect Discord file attachments and add a compact risk label plus More menu.
+// Detect Discord file attachments and add a compact risk label plus dropdown menu.
 function addAttachmentChecks(messageElement) {
   if (messageElement.dataset.dcsAttachmentsProcessed === "true") {
     return;
@@ -322,7 +357,7 @@ function extractAttachmentInfo(linkElement) {
 }
 
 // Build one compact UI row for one attachment.
-// The row shows only the risk label and a More button.
+// First only the label and More button are visible.
 function createAttachmentRow(attachmentInfo) {
   if (!attachmentInfo || typeof attachmentInfo.url !== "string") {
     return null;
@@ -338,20 +373,27 @@ function createAttachmentRow(attachmentInfo) {
   const moreButton = createCheckButton("More");
   moreButton.classList.add("dcs-more-button");
 
-  const menu = document.createElement("div");
-  menu.className = "dcs-attachment-menu";
-  menu.hidden = true;
+  const dropdown = document.createElement("div");
+  dropdown.className = "dcs-attachment-dropdown";
+  dropdown.hidden = true;
 
   const reasonButton = createMenuButton("Why flagged");
+
+  const reasonText = document.createElement("div");
+  reasonText.className = "dcs-attachment-reason";
+  reasonText.hidden = true;
+  reasonText.textContent = getAttachmentExplanationText(attachmentInfo);
+
+  const checkUrlButton = createMenuButton("Check attachment URL");
+  const controlsElement = createControlsContainer();
+
   reasonButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    toggleReasonText(menu, attachmentInfo.riskReason);
+
+    reasonText.hidden = !reasonText.hidden;
   });
 
-  const controlsElement = createControlsContainer();
-
-  const checkUrlButton = createMenuButton("Check attachment URL");
   checkUrlButton.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -366,21 +408,39 @@ function createAttachmentRow(attachmentInfo) {
     });
   });
 
-  menu.appendChild(reasonButton);
-  menu.appendChild(checkUrlButton);
-  menu.appendChild(controlsElement);
-
   moreButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    menu.hidden = !menu.hidden;
+
+    const shouldOpen = dropdown.hidden;
+
+    closeAllAttachmentMenus();
+    dropdown.hidden = !shouldOpen;
   });
+
+  dropdown.appendChild(reasonButton);
+  dropdown.appendChild(checkUrlButton);
+  dropdown.appendChild(reasonText);
+  dropdown.appendChild(controlsElement);
 
   row.appendChild(riskLabel);
   row.appendChild(moreButton);
-  row.appendChild(menu);
+  row.appendChild(dropdown);
 
   return row;
+}
+
+// Return the explanation text shown after clicking Why flagged.
+function getAttachmentExplanationText(attachmentInfo) {
+  if (!attachmentInfo || typeof attachmentInfo !== "object") {
+    return "No extra details available.";
+  }
+
+  if (attachmentInfo.riskLevel === "low") {
+    return "No obvious filename risk.";
+  }
+
+  return attachmentInfo.riskReason || "This attachment was flagged by filename heuristics.";
 }
 
 // Insert the attachment row outside the clickable preview area.
@@ -426,7 +486,7 @@ function findSafeAttachmentContainer(linkElement) {
   return null;
 }
 
-// Create a button used inside the More menu.
+// Create a button used inside the attachment dropdown.
 function createMenuButton(buttonText) {
   const button = document.createElement("button");
   button.type = "button";
@@ -434,26 +494,6 @@ function createMenuButton(buttonText) {
   button.textContent = buttonText;
 
   return button;
-}
-
-// Toggle a small explanation text inside the menu.
-function toggleReasonText(menuElement, reasonText) {
-  if (!(menuElement instanceof HTMLElement)) {
-    return;
-  }
-
-  const existingReason = menuElement.querySelector(".dcs-attachment-reason");
-
-  if (existingReason) {
-    existingReason.remove();
-    return;
-  }
-
-  const reasonLabel = document.createElement("div");
-  reasonLabel.className = "dcs-attachment-reason";
-  reasonLabel.textContent = reasonText;
-
-  menuElement.appendChild(reasonLabel);
 }
 
 // Analyze a file name and return a simple risk assessment.
@@ -497,7 +537,7 @@ function analyzeAttachmentName(fileName) {
     return {
       riskLevel: "low",
       riskLabel: "Common document type",
-      riskReason: "PDF is common, but still verify before opening"
+      riskReason: "No obvious filename risk."
     };
   }
 
@@ -511,8 +551,8 @@ function analyzeAttachmentName(fileName) {
 
   return {
     riskLevel: "low",
-    riskLabel: "No obvious filename risk",
-    riskReason: "Filename does not match common risky patterns"
+    riskLabel: "Low risk attachment",
+    riskReason: "No obvious filename risk."
   };
 }
 
