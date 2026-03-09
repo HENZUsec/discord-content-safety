@@ -8,7 +8,7 @@
   vertical-align: middle;
 }
 
-/* Main action button used for VirusTotal checks. */
+/* Main action button used for menus and checks. */
 .dcs-button {
   padding: 2px 8px;
   font-size: 11px;
@@ -21,7 +21,7 @@
   white-space: nowrap;
 }
 
-/* Hover state for the action button. */
+/* Hover state for the main action button. */
 .dcs-button:hover {
   background: rgba(88, 101, 242, 0.25);
 }
@@ -70,6 +70,14 @@
   color: #cbd5e1;
 }
 
+/* Small wrapper used for normal link menus. */
+.dcs-link-menu-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  position: relative;
+}
+
 /* Container that holds detected hashes below a message. */
 .dcs-hash-section {
   margin-top: 6px;
@@ -107,39 +115,10 @@
   z-index: 20;
 }
 
-/* Base style for attachment risk labels. */
-.dcs-attachment-risk {
-  display: inline-block;
-  width: fit-content;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
-/* High risk attachment label. */
-.dcs-attachment-risk-high {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fca5a5;
-}
-
-/* Medium risk attachment label. */
-.dcs-attachment-risk-medium {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fcd34d;
-}
-
-/* Low risk attachment label. */
-.dcs-attachment-risk-low {
-  background: rgba(34, 197, 94, 0.18);
-  color: #a7f3d0;
-}
-
-/* Dropdown menu opened from the More button. */
-.dcs-attachment-dropdown {
+/* Generic drop-up menu used for links and attachments. */
+.dcs-dropdown {
   position: absolute;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   left: 0;
   z-index: 50;
   display: flex;
@@ -154,11 +133,11 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
-.dcs-attachment-dropdown[hidden] {
+.dcs-dropdown[hidden] {
   display: none !important;
 }
 
-/* Button inside the attachment dropdown menu. */
+/* Button inside dropdown menus. */
 .dcs-menu-button {
   width: 100%;
   text-align: left;
@@ -182,7 +161,27 @@
   outline-offset: 2px;
 }
 
-/* Explanation text shown after clicking Why flagged. */
+/* Colored risk button inside the attachment dropdown. */
+.dcs-menu-risk-button {
+  border: none;
+}
+
+.dcs-menu-risk-button.dcs-attachment-risk-high {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.dcs-menu-risk-button.dcs-attachment-risk-medium {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.dcs-menu-risk-button.dcs-attachment-risk-low {
+  background: rgba(34, 197, 94, 0.18);
+  color: #a7f3d0;
+}
+
+/* Explanation text shown after clicking the risk button. */
 .dcs-attachment-reason {
   font-size: 11px;
   color: #cbd5e1;
@@ -194,6 +193,6 @@
 }
 
 /* Keep result text aligned nicely inside the dropdown. */
-.dcs-attachment-dropdown .dcs-controls {
+.dcs-dropdown .dcs-controls {
   margin-left: 0;
 }
