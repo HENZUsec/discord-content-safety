@@ -1,20 +1,23 @@
 # Discord Content Safety
 
-A simple browser extension for Discord Web that helps inspect shared content such as links, hashes, and file attachments with VirusTotal.
+A browser extension for Discord Web that lets you manually check links, hashes, and attachment URLs with VirusTotal.
 
 ## Features
 
-- Detects links in Discord messages
-- Detects MD5, SHA1, and SHA256 hashes in message text
-- Lets the user save their own VirusTotal API key inside the extension popup
-- Checks links and hashes with VirusTotal
-- Adds heuristic attachment labels without downloading the file
-- Lets the user manually check an attachment URL with VirusTotal
-- Uses a manual scan model for all VirusTotal checks
+- Check links with VirusTotal
+- Check MD5, SHA1, and SHA256 hashes with VirusTotal
+- Show simple risk labels for file attachments
+- Check attachment URLs with VirusTotal
+- Save your own VirusTotal API key in the extension popup
 
 ## Browser support
 
-This extension is built for Chromium-based desktop browsers such as Brave, Chrome, Edge, Opera, and similar browsers.
+This extension is made for Chromium-based desktop browsers such as:
+
+- Brave
+- Chrome
+- Edge
+- Opera
 
 It is intended for Discord Web on desktop.
 
@@ -26,9 +29,7 @@ Download the project from GitHub or clone it locally.
 
 ### 2. Load the extension
 
-Open your browser's extensions page.
-
-For Chromium-based browsers, this is usually one of the following:
+Open your browser's extensions page:
 
 - `brave://extensions`
 - `chrome://extensions`
@@ -43,104 +44,57 @@ Then:
 
 ### 3. Save your VirusTotal API key
 
-Click the extension icon in your browser.
+Click the extension icon.
 
-In the popup:
+Then:
 
-- paste your own VirusTotal API key
+- paste your VirusTotal API key
 - click **Save**
-
-The key is stored locally inside the extension.
 
 ## Usage
 
-### 1. Open Discord Web
-
-Go to:
+Open Discord Web:
 
 `https://discord.com/app`
 
-Log in as usual.
-
-### 2. Use the check buttons
-
-The extension looks for:
+The extension can detect:
 
 - links
 - MD5 hashes
 - SHA1 hashes
 - SHA256 hashes
+- file attachments
 
-When supported content is found, the extension adds:
+Available actions:
 
 - **Check link**
 - **Check hash**
-
-Click a button to send the item to VirusTotal and show the result directly in Discord.
+- **More** for attachment actions
+- **Check attachment URL**
 
 ## Attachment checks
 
-This extension can also inspect Discord file attachments without downloading the file itself.
+Attachments are checked locally by filename only.
 
-The current attachment check is heuristic-based and looks at:
-
-- file name
-- file extension
-- double extensions
-- macro-enabled document formats
-- archive and script-like file types
-
-Attachment labels may include:
+The extension may show labels such as:
 
 - `High risk file type`
 - `Macro-enabled document`
 - `Potentially risky attachment`
 - `No obvious filename risk`
 
-For attachments, the extension shows:
+This is **not** a full file scan.
 
-- a compact risk label
-- a **More** button
-- **Why flagged**
-- **Check attachment URL**
-
-**Note:**  
-This is **not a full file scan**. The extension does not download, hash, or upload the file in this mode.
+The extension does **not** download, hash, or upload the attachment in this mode.
 
 ## Current behavior
 
-This extension uses a manual scan model.
+All VirusTotal checks are manual.
 
-It does not automatically send links, hashes, or attachment URLs to VirusTotal.
-
-VirusTotal checks only happen when the user clicks:
-
-- **Check link**
-- **Check hash**
-- **Check attachment URL**
-
-Attachment risk labels are local heuristic checks based on visible filename patterns and do not download, hash, or upload the file.
-
-## Example results
-
-VirusTotal checks may return results such as:
-
-- `No VT match`
-- `Clean or undetected`
-- `Clean or undetected (cached)`
-- `Flagged: 1 malicious, 0 suspicious`
-- `Rate limit reached. Please wait before checking again.`
+Nothing is sent to VirusTotal unless you click a button.
 
 ## Notes
 
-- This extension works on Discord Web, not the native desktop app
-- Discord may change its page structure over time, so selectors may need updates
-- VirusTotal public API has rate limits, so avoid checking too many items too quickly
-
-## Future ideas
-
-- persistent cache in extension storage
-- improved attachment detection for more Discord layouts
-- optional support for file hashing
-- ignore more internal Discord links
-- settings for behavior and filtering
+- works on Discord Web, not the desktop app
+- works best in Chromium-based desktop browsers
+- VirusTotal public API has rate limits
