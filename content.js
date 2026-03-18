@@ -59,6 +59,7 @@ startExtension();
 function startExtension() {
   try {
     setupDropdownCloseHandler();
+    removeInjectedUiOutsideChatMessages();
     scanEntirePage();
     observePageChanges();
   } catch (error) {
@@ -106,6 +107,27 @@ function closeAllDropdownMenus() {
   }
 }
 
+// Remove any injected UI that is not inside a real chat message.
+function removeInjectedUiOutsideChatMessages() {
+  const injectedElements = document.querySelectorAll(
+    ".dcs-link-menu-wrapper, .dcs-attachment-row, .dcs-hash-section"
+  );
+
+  for (const injectedElement of injectedElements) {
+    if (!(injectedElement instanceof HTMLElement)) {
+      continue;
+    }
+
+    const hostMessage = injectedElement.closest(
+      "li[id^='chat-messages-'], div[id^='chat-messages-'], article"
+    );
+
+    if (!isRealChatMessageElement(hostMessage)) {
+      injectedElement.remove();
+    }
+  }
+}
+
 // Scan all current Discord messages.
 function scanEntirePage() {
   const messageElements = findAllMessageElements(document);
@@ -126,7 +148,7 @@ function safelyProcessMessage(messageElement) {
 
 // Process one Discord message element.
 function processMessage(messageElement) {
-  if (!(messageElement instanceof HTMLElement)) {
+  if (!isRealChatMessageElement(messageElement)) {
     return;
   }
 
@@ -135,16 +157,39 @@ function processMessage(messageElement) {
   addAttachmentChecks(messageElement);
 }
 
-// Find possible Discord message containers.
+// Return true only for actual chat messages in the message view.
+function isRealChatMessageElement(element) {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (
+    element.matches("li[id^='chat-messages-']") ||
+    element.matches("div[id^='chat-messages-']")
+  ) {
+    return true;
+  }
+
+  if (
+    element.matches("article") &&
+    element.querySelector("[id^='message-content-']")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+// Find possible real Discord message containers.
 function findAllMessageElements(rootElement) {
   if (!(rootElement instanceof Element) && rootElement !== document) {
     return [];
   }
 
   const selectors = [
-    "article",
+    "li[id^='chat-messages-']",
     "div[id^='chat-messages-']",
-    "li [id^='chat-messages-']"
+    "article"
   ];
 
   const allElements = new Set();
@@ -153,16 +198,24 @@ function findAllMessageElements(rootElement) {
     const foundElements = rootElement.querySelectorAll(selector);
 
     for (const element of foundElements) {
-      allElements.add(element);
+      if (isRealChatMessageElement(element)) {
+        allElements.add(element);
+      }
     }
   }
 
   return Array.from(allElements);
 }
 
-// Add a More menu next to each valid normal link.
+// Add a More menu next to each valid normal link in the message text area only.
 function addButtonsToLinks(messageElement) {
-  const linkElements = messageElement.querySelectorAll("a[href]");
+  const textContainer = findBestTextContainer(messageElement);
+
+  if (!(textContainer instanceof HTMLElement)) {
+    return;
+  }
+
+  const linkElements = textContainer.querySelectorAll("a[href]");
 
   for (const linkElement of linkElements) {
     if (!(linkElement instanceof HTMLAnchorElement)) {
@@ -1080,6 +1133,8 @@ function hashAlreadyAdded(hashSection, hashValue) {
 // Watch for new messages added to the page.
 function observePageChanges() {
   const observer = new MutationObserver((mutations) => {
+    let shouldCleanup = false;
+
     for (const mutation of mutations) {
       for (const addedNode of mutation.addedNodes) {
         if (!(addedNode instanceof HTMLElement)) {
@@ -1087,7 +1142,12 @@ function observePageChanges() {
         }
 
         safelyProcessAddedNode(addedNode);
+        shouldCleanup = true;
       }
+    }
+
+    if (shouldCleanup) {
+      removeInjectedUiOutsideChatMessages();
     }
   });
 
@@ -1108,7 +1168,7 @@ function safelyProcessAddedNode(addedNode) {
 
 // Process new nodes and search for message elements inside them.
 function processAddedNode(addedNode) {
-  if (looksLikeMessageElement(addedNode)) {
+  if (isRealChatMessageElement(addedNode)) {
     safelyProcessMessage(addedNode);
   }
 
@@ -1117,13 +1177,4 @@ function processAddedNode(addedNode) {
   for (const nestedMessage of nestedMessages) {
     safelyProcessMessage(nestedMessage);
   }
-}
-
-// Check if an element looks like a Discord message.
-function looksLikeMessageElement(element) {
-  return (
-    element.matches("article") ||
-    element.matches("div[id^='chat-messages-']") ||
-    element.matches("li")
-  );
 }
