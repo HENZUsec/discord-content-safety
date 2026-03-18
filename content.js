@@ -52,19 +52,26 @@ const MACRO_ENABLED_EXTENSIONS = new Set([
 ]);
 
 let dropdownCloseHandlerInitialized = false;
+let currentRouteKey = "";
 
 // Start the extension.
 startExtension();
 
 function startExtension() {
   try {
+    currentRouteKey = getRouteKey();
     setupDropdownCloseHandler();
-    removeInjectedUiOutsideChatMessages();
+    hardResetInjectedUi();
     scanEntirePage();
     observePageChanges();
   } catch (error) {
     console.error("Discord Content Safety failed to start:", error);
   }
+}
+
+// Return a simple route key for Discord SPA navigation.
+function getRouteKey() {
+  return window.location.pathname + window.location.search + window.location.hash;
 }
 
 // Close open dropdowns when the user clicks outside them.
@@ -107,24 +114,31 @@ function closeAllDropdownMenus() {
   }
 }
 
-// Remove any injected UI that is not inside a real chat message.
-function removeInjectedUiOutsideChatMessages() {
+// Remove all injected UI and reset processed markers.
+function hardResetInjectedUi() {
   const injectedElements = document.querySelectorAll(
     ".dcs-link-menu-wrapper, .dcs-attachment-row, .dcs-hash-section"
   );
 
-  for (const injectedElement of injectedElements) {
-    if (!(injectedElement instanceof HTMLElement)) {
+  for (const element of injectedElements) {
+    if (element instanceof HTMLElement) {
+      element.remove();
+    }
+  }
+
+  const markedElements = document.querySelectorAll(
+    "[data-dcs-link-processed], [data-dcs-attachment-processed], [data-dcs-attachments-processed], [data-dcs-hash-processed]"
+  );
+
+  for (const element of markedElements) {
+    if (!(element instanceof HTMLElement)) {
       continue;
     }
 
-    const hostMessage = injectedElement.closest(
-      "li[id^='chat-messages-'], div[id^='chat-messages-'], article"
-    );
-
-    if (!isRealChatMessageElement(hostMessage)) {
-      injectedElement.remove();
-    }
+    delete element.dataset.dcsLinkProcessed;
+    delete element.dataset.dcsAttachmentProcessed;
+    delete element.dataset.dcsAttachmentsProcessed;
+    delete element.dataset.dcsHashProcessed;
   }
 }
 
@@ -157,30 +171,19 @@ function processMessage(messageElement) {
   addAttachmentChecks(messageElement);
 }
 
-// Return true only for actual chat messages in the message view.
+// Only treat real chat messages as valid hosts.
 function isRealChatMessageElement(element) {
   if (!(element instanceof HTMLElement)) {
     return false;
   }
 
-  if (
+  return (
     element.matches("li[id^='chat-messages-']") ||
     element.matches("div[id^='chat-messages-']")
-  ) {
-    return true;
-  }
-
-  if (
-    element.matches("article") &&
-    element.querySelector("[id^='message-content-']")
-  ) {
-    return true;
-  }
-
-  return false;
+  );
 }
 
-// Find possible real Discord message containers.
+// Find current real Discord message containers.
 function findAllMessageElements(rootElement) {
   if (!(rootElement instanceof Element) && rootElement !== document) {
     return [];
@@ -188,8 +191,7 @@ function findAllMessageElements(rootElement) {
 
   const selectors = [
     "li[id^='chat-messages-']",
-    "div[id^='chat-messages-']",
-    "article"
+    "div[id^='chat-messages-']"
   ];
 
   const allElements = new Set();
@@ -207,7 +209,7 @@ function findAllMessageElements(rootElement) {
   return Array.from(allElements);
 }
 
-// Add a More menu next to each valid normal link in the message text area only.
+// Add a More menu next to each valid normal link in message text only.
 function addButtonsToLinks(messageElement) {
   const textContainer = findBestTextContainer(messageElement);
 
@@ -935,21 +937,20 @@ function sendMessageToBackground(message) {
   });
 }
 
-// Find the best text container inside a Discord message.
+// Find the actual text container inside a Discord message.
+// No fallback to the whole element.
 function findBestTextContainer(messageElement) {
   if (!(messageElement instanceof HTMLElement)) {
     return null;
   }
 
-  const possibleContainer =
-    messageElement.querySelector("[id^='message-content-']") ||
-    messageElement.querySelector("[class*='messageContent']");
+  const textContainer = messageElement.querySelector("[id^='message-content-']");
 
-  if (possibleContainer instanceof HTMLElement) {
-    return possibleContainer;
+  if (textContainer instanceof HTMLElement) {
+    return textContainer;
   }
 
-  return messageElement;
+  return null;
 }
 
 // Get safe text from an element.
@@ -1133,7 +1134,14 @@ function hashAlreadyAdded(hashSection, hashValue) {
 // Watch for new messages added to the page.
 function observePageChanges() {
   const observer = new MutationObserver((mutations) => {
-    let shouldCleanup = false;
+    const newRouteKey = getRouteKey();
+
+    if (newRouteKey !== currentRouteKey) {
+      currentRouteKey = newRouteKey;
+      hardResetInjectedUi();
+      scanEntirePage();
+      return;
+    }
 
     for (const mutation of mutations) {
       for (const addedNode of mutation.addedNodes) {
@@ -1142,12 +1150,7 @@ function observePageChanges() {
         }
 
         safelyProcessAddedNode(addedNode);
-        shouldCleanup = true;
       }
-    }
-
-    if (shouldCleanup) {
-      removeInjectedUiOutsideChatMessages();
     }
   });
 
